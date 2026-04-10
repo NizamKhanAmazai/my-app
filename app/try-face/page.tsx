@@ -17,19 +17,16 @@ export default function DiagnosticAR() {
     setError(null);
     try {
       // Check for HTTPS
-      if (
-        window.location.protocol !== "https:" &&
-        window.location.hostname !== "localhost"
-      ) {
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
         throw new Error("SECURITY: Camera requires HTTPS on mobile devices.");
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
+        video: { 
           facingMode: "user",
           width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
+          height: { ideal: 480 } 
+        }
       });
 
       if (videoRef.current) {
@@ -43,11 +40,7 @@ export default function DiagnosticAR() {
       }
     } catch (err: any) {
       console.error("Camera Error:", err);
-      setError(
-        err.name === "NotAllowedError"
-          ? "Permission Denied: Please allow camera access."
-          : err.message,
-      );
+      setError(err.name === "NotAllowedError" ? "Permission Denied: Please allow camera access." : err.message);
     }
   };
 
@@ -55,27 +48,25 @@ export default function DiagnosticAR() {
   const initAI = async () => {
     try {
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({
-        canvas: canvasRef.current!,
-        alpha: true,
-        antialias: false,
+      const camera = new THREE.PerspectiveCamera(75, 640/480, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ 
+        canvas: canvasRef.current!, 
+        alpha: true, 
+        antialias: false 
       });
       renderer.setSize(640, 480);
       scene.add(new THREE.AmbientLight(0xffffff, 2));
 
       const loader = new GLTFLoader();
       let glasses: THREE.Group | null = null;
-
-      loader.load("/models/glasses_1.glb", (gltf) => {
+      
+      loader.load("https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/Sunglasses/glTF-Binary/Sunglasses.glb", (gltf) => {
         glasses = gltf.scene as any;
         glasses!.visible = false;
         scene.add(glasses!);
       });
 
-      const fileset = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
-      );
+      const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
       const landmarker = await FaceLandmarker.createFromOptions(fileset, {
         baseOptions: {
           modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
@@ -88,26 +79,14 @@ export default function DiagnosticAR() {
 
       const loop = () => {
         if (videoRef.current && videoRef.current.readyState >= 2) {
-          const results = landmarker.detectForVideo(
-            videoRef.current,
-            performance.now(),
-          );
+          const results = landmarker.detectForVideo(videoRef.current, performance.now());
           if (results.faceLandmarks?.[0] && glasses) {
             glasses.visible = true;
             const p = results.faceLandmarks[0];
             // Core mapping
-            glasses.position.set(
-              (p[168].x - 0.5) * -8,
-              (0.5 - p[168].y) * 6,
-              2,
-            );
-            glasses.rotation.z = -Math.atan2(
-              p[263].y - p[33].y,
-              p[263].x - p[33].x,
-            );
-            const d = Math.sqrt(
-              Math.pow(p[263].x - p[33].x, 2) + Math.pow(p[263].y - p[33].y, 2),
-            );
+            glasses.position.set((p[168].x - 0.5) * -8, (0.5 - p[168].y) * 6, 2);
+            glasses.rotation.z = -Math.atan2(p[263].y - p[33].y, p[263].x - p[33].x);
+            const d = Math.sqrt(Math.pow(p[263].x - p[33].x, 2) + Math.pow(p[263].y - p[33].y, 2));
             glasses.scale.setScalar(d * 12);
           } else if (glasses) {
             glasses.visible = false;
@@ -117,6 +96,7 @@ export default function DiagnosticAR() {
         requestAnimationFrame(loop);
       };
       loop();
+
     } catch (e: any) {
       setAiStatus("AI Failed to load.");
       console.error(e);
@@ -126,25 +106,16 @@ export default function DiagnosticAR() {
   return (
     <main className="min-h-screen bg-orange-500 p-4 flex flex-col items-center justify-center font-sans">
       <div className="bg-white p-6 rounded-[2rem] shadow-2xl w-full max-w-lg border-b-8 border-orange-700">
-        <h1 className="text-center font-black text-orange-600 italic text-2xl mb-4 uppercase tracking-tighter">
-          Diagnostic Mirror
-        </h1>
+        
+        <h1 className="text-center font-black text-orange-600 italic text-2xl mb-4 uppercase tracking-tighter">Diagnostic Mirror</h1>
 
         <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden mb-6">
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className="absolute inset-0 w-full h-full object-cover -scale-x-100"
-          />
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
-          />
-
+          <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100" />
+          
           {!cameraActive && !error && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <button
+              <button 
                 onClick={startCamera}
                 className="bg-orange-600 text-white px-8 py-3 rounded-full font-bold animate-bounce shadow-xl"
               >
@@ -163,11 +134,7 @@ export default function DiagnosticAR() {
         <div className="space-y-2">
           <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
             <span className="text-slate-400">Camera Status:</span>
-            <span
-              className={cameraActive ? "text-green-500" : "text-orange-400"}
-            >
-              {cameraActive ? "Active" : "Off"}
-            </span>
+            <span className={cameraActive ? "text-green-500" : "text-orange-400"}>{cameraActive ? "Active" : "Off"}</span>
           </div>
           <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
             <span className="text-slate-400">AI Engine:</span>
