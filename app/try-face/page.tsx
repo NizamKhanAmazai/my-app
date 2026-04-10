@@ -3,188 +3,120 @@
 import React, { useEffect, useRef, useState, Suspense } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, Environment } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 const GLB_MODEL_PATH = "/models/glasses_1.glb";
 
-// ==========================================
-// 1. 3D Glasses Component (Optimized)
-// ==========================================
-function GlassesModel({ trackingData }: { trackingData: TrackingResult | null }) {
+function Glasses({ tracking }: { tracking: any }) {
   const { scene } = useGLTF(GLB_MODEL_PATH);
-  const groupRef = useRef<THREE.Group>(null);
+  const ref = useRef<THREE.Group>(null);
 
   useFrame(() => {
-    if (!groupRef.current) return;
-
-    if (!trackingData || !trackingData.detected) {
-      groupRef.current.visible = false;
+    if (!ref.current || !tracking?.detected) {
+      if (ref.current) ref.current.visible = false;
       return;
     }
 
-    const landmarks = trackingData.landmarks;
-    const group = groupRef.current;
-    group.visible = true;
+    const pts = tracking.landmarks;
+    ref.current.visible = true;
 
-    // Mapping logic for a standard overlay
-    const noseBridge = landmarks[168];
-    const leftEye = landmarks[33];
-    const rightEye = landmarks[263];
-    
-    // Scale tracking to Canvas units (approximate)
-    const x = (noseBridge.x - 0.5) * 8; 
-    const y = (0.5 - noseBridge.y) * 6;
+    // Direct mapping for lower CPU usage
+    const nose = pts[168];
+    const left = pts[33];
+    const right = pts[263];
 
-    group.position.set(
-      THREE.MathUtils.lerp(group.position.x, x, 0.8),
-      THREE.MathUtils.lerp(group.position.y, y, 0.8),
-      2 // Move closer to camera to be visible
-    );
+    // Position (Simplified for performance)
+    ref.current.position.set((nose.x - 0.5) * -8, (0.5 - nose.y) * 6, 2);
 
-    // Rotation
-    const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
-    group.rotation.z = -roll;
+    // Tilt
+    const roll = Math.atan2(right.y - left.y, right.x - left.x);
+    ref.current.rotation.z = -roll;
 
-    // Distance/Scale
-    const dist = Math.sqrt(Math.pow(rightEye.x - leftEye.x, 2) + Math.pow(rightEye.y - leftEye.y, 2));
-    const s = dist * 10;
-    group.scale.set(s, s, s);
+    // Scale
+    const d = Math.sqrt(Math.pow(right.x - left.x, 2) + Math.pow(right.y - left.y, 2));
+    ref.current.scale.setScalar(d * 11);
   });
 
-  return (
-    <group ref={groupRef} visible={false}>
-      <primitive object={scene} />
-    </group>
-  );
+  return <group ref={ref}><primitive object={scene} /></group>;
 }
 
-// ==========================================
-// 2. Main Page & Viewport Logic
-// ==========================================
-export default function VirtualTryOn() {
+export default function VivoOptimizedAR() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [tracking, setTracking] = useState<TrackingResult | null>(null);
-  const [isAiLoaded, setIsAiLoaded] = useState(false);
-  const [webglError, setWebglError] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Setup Camera & AI
   useEffect(() => {
     let landmarker: FaceLandmarker;
-    let animationFrame: number;
     let stream: MediaStream;
+    let frame: number;
 
-    async function setup() {
+    async function start() {
       try {
-        // 1. Init AI
-        const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+        const fileset = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+        );
+        
         landmarker = await FaceLandmarker.createFromOptions(fileset, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "CPU",
+            delegate: "CPU", // Forcing CPU saves the Vivo's GPU from crashing
           },
           runningMode: "VIDEO",
           numFaces: 1,
         });
-        setIsAiLoaded(true);
 
-        // 2. Init Camera
+        // Requesting lower resolution for the Vivo Y21 to save RAM
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: 640, height: 480, facingMode: "user" } 
+          video: { facingMode: "user", width: 320, height: 240 } 
         });
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
             videoRef.current?.play();
-            startDetection();
+            loop();
           };
         }
-      } catch (err) {
-        console.error("Setup failed", err);
+      } catch (e: any) {
+        setError("Make sure you are using HTTPS and allowed Camera access.");
       }
     }
 
-    function startDetection() {
-      if (videoRef.current && landmarker) {
-        const results = landmarker.detectForVideo(videoRef.current, performance.now());
-        if (results.faceLandmarks.length > 0) {
-          setTracking({ detected: true, landmarks: results.faceLandmarks[0] });
-        } else {
-          setTracking({ detected: false, landmarks: [] });
-        }
+    const loop = () => {
+      if (videoRef.current?.readyState === 4 && landmarker) {
+        const res = landmarker.detectForVideo(videoRef.current, performance.now());
+        setTracking(res.faceLandmarks?.[0] ? { detected: true, landmarks: res.faceLandmarks[0] } : { detected: false });
       }
-      animationFrame = requestAnimationFrame(startDetection);
-    }
+      frame = requestAnimationFrame(loop);
+    };
 
-    setup();
+    start();
     return () => {
-      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(frame);
       stream?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
+  if (error) return <div className="p-10 text-white bg-red-600 h-screen">{error}</div>;
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-yellow-400 to-orange-600 p-4 flex flex-col items-center justify-center font-sans">
-      <div className="w-full max-w-5xl bg-white rounded-[2rem] shadow-2xl overflow-hidden border-b-8 border-orange-800">
-        
-        <header className="bg-orange-600 p-6 flex justify-between items-center text-white">
-          <h1 className="text-2xl font-black italic tracking-tighter uppercase">AR Vision 3D</h1>
-          <div className="text-xs font-bold bg-yellow-400 text-orange-950 px-3 py-1 rounded-full">
-            {tracking?.detected ? "FACE ACTIVE" : "SCANNING..."}
-          </div>
-        </header>
-
-        <div className="p-8 grid lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4 space-y-4">
-            <div className="p-6 bg-orange-50 rounded-2xl border border-orange-200 text-sm">
-                <p className="font-bold text-orange-800">Note for Intel Graphics:</p>
-                <p className="text-orange-900/70 italic mt-2">If glasses don't appear, your browser might have disabled 3D for your graphics card.</p>
-            </div>
-            {!isAiLoaded && <div className="p-4 bg-yellow-100 text-orange-800 font-bold animate-pulse rounded-xl text-center">Loading AI...</div>}
-          </div>
-
-          {/* VIEWPORT AREA */}
-          <div className="lg:col-span-8 relative aspect-video bg-black rounded-3xl overflow-hidden shadow-inner border-4 border-white">
-            
-            {/* LAYER 1: Standard Video Background (Mirror mode) */}
-            <video 
-              ref={videoRef} 
-              playsInline 
-              muted 
-              className="absolute inset-0 w-full h-full object-cover -scale-x-100" 
-            />
-
-            {/* LAYER 2: Three.js AR Overlay */}
-            <div className="absolute inset-0 z-10 -scale-x-100 pointer-events-none">
-              <Canvas 
-                gl={{ antialias: false, alpha: true }} // Alpha:true allows seeing the video through the canvas
-                onCreated={({ gl }) => {
-                   // Check if WebGL actually works
-                   if (!gl.getContext()) setWebglError("WebGL Failed");
-                }}
-              >
-                <Suspense fallback={null}>
-                  <ambientLight intensity={1} />
-                  <pointLight position={[5, 5, 5]} />
-                  <GlassesModel trackingData={tracking} />
-                </Suspense>
-              </Canvas>
-            </div>
-
-            {webglError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white p-10 text-center z-20">
-                <p className="font-bold">Hardware Error: Your computer's graphics card (Intel HD 3000) is too old to render 3D in this browser.</p>
-              </div>
-            )}
-          </div>
-        </div>
+    <div className="fixed inset-0 bg-black overflow-hidden">
+      <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <Canvas dpr={1} camera={{ position: [0, 0, 5] }}>
+          <ambientLight intensity={2} />
+          <Suspense fallback={null}>
+            <Glasses tracking={tracking} />
+          </Suspense>
+        </Canvas>
       </div>
-    </main>
+      <div className="absolute top-5 left-5 text-white text-[10px] font-mono bg-black/50 p-2 rounded">
+        VIVO Y21 OPTIMIZED MODE
+      </div>
+    </div>
   );
 }
-
-type TrackingResult = { detected: boolean; landmarks: any[] };
 
 
 
