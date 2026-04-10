@@ -1,227 +1,671 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
-// Ensure your model is at: public/models/glasses_1.glb
-const MODEL_PATH = "/models/glasses_1.glb";
-
-export default function VirtualTryOn3D() {
+export default function DiagnosticAR() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [aiStatus, setAiStatus] = useState("Waiting for camera...");
+  const [error, setError] = useState<string | null>(null);
 
-  // Three.js References
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const modelRef = useRef<THREE.Group | null>(null);
+  // 1. INITIALIZE CAMERA (The most important part)
+  const startCamera = async () => {
+    setError(null);
+    try {
+      // Check for HTTPS
+      if (
+        window.location.protocol !== "https:" &&
+        window.location.hostname !== "localhost"
+      ) {
+        throw new Error("SECURITY: Camera requires HTTPS on mobile devices.");
+      }
 
-  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
-    null,
-  );
-  const [status, setStatus] = useState("Loading AI...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+      });
 
-  // 1. Initialize Three.js (The 3D Engine)
-  useEffect(() => {
-    if (!canvasRef.current) return;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play();
+          setCameraActive(true);
+          setAiStatus("Camera OK. Loading AI...");
+          initAI(); // Start AI only after camera works
+        };
+      }
+    } catch (err: any) {
+      console.error("Camera Error:", err);
+      setError(
+        err.name === "NotAllowedError"
+          ? "Permission Denied: Please allow camera access."
+          : err.message,
+      );
+    }
+  };
 
-    // Create Scene
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
+  // 2. INITIALIZE AI & 3D
+  const initAI = async () => {
+    try {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvasRef.current!,
+        alpha: true,
+        antialias: false,
+      });
+      renderer.setSize(640, 480);
+      scene.add(new THREE.AmbientLight(0xffffff, 2));
 
-    // Create Camera
-    const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
-    camera.position.z = 5;
-    cameraRef.current = camera;
+      const loader = new GLTFLoader();
+      let glasses: THREE.Group | null = null;
 
-    // Create Renderer (Optimized for Vivo Y21)
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      alpha: true, // Transparent background to see video
-      antialias: false, // Save memory
-      precision: "mediump", // Lowers GPU load
-    });
-    renderer.setSize(640, 480);
-    rendererRef.current = renderer;
+      loader.load("/models/glasses_1.glb", (gltf) => {
+        glasses = gltf.scene as any;
+        glasses!.visible = false;
+        scene.add(glasses!);
+      });
 
-    // Add Basic Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-    scene.add(ambientLight);
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-    sunLight.position.set(0, 5, 5);
-    scene.add(sunLight);
-
-    // Load your GLB Model
-    const loader = new GLTFLoader();
-    loader.load(MODEL_PATH, (gltf) => {
-      const model = gltf.scene;
-      model.visible = false; // Hide until face is detected
-      scene.add(model);
-      modelRef.current = model as any;
-    });
-
-    return () => {
-      renderer.dispose();
-    };
-  }, []);
-
-  // 2. Initialize MediaPipe (The AI) - Same as your working code
-  useEffect(() => {
-    const initAI = async () => {
       const fileset = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
       );
       const landmarker = await FaceLandmarker.createFromOptions(fileset, {
         baseOptions: {
           modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-          delegate: "GPU", // Using GPU as your working code did
+          delegate: "CPU", // Vital for Vivo Y21
         },
         runningMode: "VIDEO",
-        numFaces: 1,
       });
-      setFaceLandmarker(landmarker);
-      setStatus("Ready!");
-    };
-    initAI();
-  }, []);
 
-  // 3. Start Camera - Same as your working code
-  useEffect(() => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({
-          video: { width: 640, height: 480, facingMode: "user" },
-        })
-        .then((stream) => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play();
-              predictWebcam();
-            };
+      setAiStatus("AI Ready. Tracking...");
+
+      const loop = () => {
+        if (videoRef.current && videoRef.current.readyState >= 2) {
+          const results = landmarker.detectForVideo(
+            videoRef.current,
+            performance.now(),
+          );
+          if (results.faceLandmarks?.[0] && glasses) {
+            glasses.visible = true;
+            const p = results.faceLandmarks[0];
+            // Core mapping
+            glasses.position.set(
+              (p[168].x - 0.5) * -8,
+              (0.5 - p[168].y) * 6,
+              2,
+            );
+            glasses.rotation.z = -Math.atan2(
+              p[263].y - p[33].y,
+              p[263].x - p[33].x,
+            );
+            const d = Math.sqrt(
+              Math.pow(p[263].x - p[33].x, 2) + Math.pow(p[263].y - p[33].y, 2),
+            );
+            glasses.scale.setScalar(d * 12);
+          } else if (glasses) {
+            glasses.visible = false;
           }
-        });
+          renderer.render(scene, camera);
+        }
+        requestAnimationFrame(loop);
+      };
+      loop();
+    } catch (e: any) {
+      setAiStatus("AI Failed to load.");
+      console.error(e);
     }
-  }, [faceLandmarker]);
-
-  const predictWebcam = async () => {
-    if (
-      !videoRef.current ||
-      !faceLandmarker ||
-      !sceneRef.current ||
-      !rendererRef.current
-    ) {
-      requestAnimationFrame(predictWebcam);
-      return;
-    }
-
-    const results = faceLandmarker.detectForVideo(
-      videoRef.current,
-      performance.now(),
-    );
-
-    if (modelRef.current) {
-      if (results.faceLandmarks.length > 0) {
-        // Requirement 1: Appear when face is detected
-        modelRef.current.visible = true;
-
-        const landmarks = results.faceLandmarks[0];
-        const noseBridge = landmarks[168];
-        const leftEye = landmarks[33];
-        const rightEye = landmarks[263];
-
-        // --- MATH: Position ---
-        // Convert MediaPipe (0 to 1) to Three.js coordinates
-        // For the camera at Z=5, the visible width is roughly 8 units
-        modelRef.current.position.x = (noseBridge.x - 0.5) * -8;
-        modelRef.current.position.y = (0.5 - noseBridge.y) * 6;
-        modelRef.current.position.z = 2; // Fixed distance from camera
-
-        // --- MATH: Rotation ---
-        const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
-        modelRef.current.rotation.z = -roll;
-
-        // --- MATH: Scale ---
-        const eyeDist = Math.sqrt(
-          Math.pow(rightEye.x - leftEye.x, 2) +
-            Math.pow(rightEye.y - leftEye.y, 2),
-        );
-        const scaleFactor = eyeDist * 12; // Adjust 12 until it fits your model
-        modelRef.current.scale.set(scaleFactor, scaleFactor, scaleFactor);
-
-        // Yaw (Turning left/right)
-        const yaw = (landmarks[1].x - noseBridge.x) * 2;
-        modelRef.current.rotation.y = yaw;
-      } else {
-        // Requirement 2: Disappear when face disappears
-        modelRef.current.visible = false;
-      }
-
-      // Render the frame
-      rendererRef.current.render(sceneRef.current, cameraRef.current!);
-    }
-
-    requestAnimationFrame(predictWebcam);
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-yellow-400 to-orange-500 p-4 flex flex-col items-center justify-center font-sans overflow-hidden">
-      <div className="max-w-4xl w-full bg-white/90 backdrop-blur-md rounded-[2rem] shadow-2xl overflow-hidden border-4 border-orange-200">
-        {/* Yellow/Orange Header */}
-        <div className="bg-orange-600 p-5 text-center">
-          <h1 className="text-2xl font-black text-white uppercase tracking-widest">
-            3D GLASSES TRY-ON
-          </h1>
-          <p className="text-yellow-300 text-[10px] font-bold uppercase">
-            {status}
-          </p>
+    <main className="min-h-screen bg-orange-500 p-4 flex flex-col items-center justify-center font-sans">
+      <div className="bg-white p-6 rounded-[2rem] shadow-2xl w-full max-w-lg border-b-8 border-orange-700">
+        <h1 className="text-center font-black text-orange-600 italic text-2xl mb-4 uppercase tracking-tighter">
+          Diagnostic Mirror
+        </h1>
+
+        <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden mb-6">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover -scale-x-100"
+          />
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
+          />
+
+          {!cameraActive && !error && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                onClick={startCamera}
+                className="bg-orange-600 text-white px-8 py-3 rounded-full font-bold animate-bounce shadow-xl"
+              >
+                ENABLE CAMERA
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="absolute inset-0 bg-red-600/90 flex items-center justify-center p-6 text-center">
+              <p className="text-white font-bold text-sm uppercase">{error}</p>
+            </div>
+          )}
         </div>
 
-        <div className="p-4 flex flex-col items-center">
-          {/* AR Viewport */}
-          <div className="relative w-full aspect-[4/3] bg-black rounded-2xl border-4 border-white shadow-lg overflow-hidden">
-            {/* The real video (Mirrored) */}
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="absolute inset-0 w-full h-full object-cover -scale-x-100"
-            />
-
-            {/* The 3D Overlay (Mirrored to match video) */}
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
-            />
-
-            {!faceLandmarker && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <div className="w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6 w-full flex justify-center">
-            <div
-              className={`px-6 py-2 rounded-full font-black text-xs transition-all ${modelRef.current?.visible ? "bg-orange-600 text-white" : "bg-yellow-100 text-orange-900 opacity-50"}`}
+        <div className="space-y-2">
+          <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+            <span className="text-slate-400">Camera Status:</span>
+            <span
+              className={cameraActive ? "text-green-500" : "text-orange-400"}
             >
-              {modelRef.current?.visible
-                ? "LENS CONNECTED"
-                : "POSITION FACE IN VIEW"}
-            </div>
+              {cameraActive ? "Active" : "Off"}
+            </span>
+          </div>
+          <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+            <span className="text-slate-400">AI Engine:</span>
+            <span className="text-orange-600">{aiStatus}</span>
           </div>
         </div>
       </div>
 
-      <footer className="mt-4 text-orange-900/50 text-[10px] font-bold uppercase tracking-widest">
-        Optimized for Vivo Y21 • 3D Engine v1.0
-      </footer>
+      <p className="mt-6 text-white/50 text-[9px] font-bold uppercase tracking-[0.2em]">
+        Next.js Hardware Bridge v3.0
+      </p>
     </main>
   );
 }
+// "use client";
+
+// import React, {
+//   Component,
+//   ErrorInfo,
+//   ReactNode,
+//   useEffect,
+//   useRef,
+//   useState,
+// } from "react";
+// import * as THREE from "three";
+// import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+// import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+
+// // 1. THE ERROR BOUNDARY CLASS
+// // This catches "rendering" crashes (like Three.js failures)
+// class ARSystemErrorBoundary extends Component<
+//   { children: ReactNode },
+//   { hasError: boolean; errorMsg: string }
+// > {
+//   constructor(props: { children: ReactNode }) {
+//     super(props);
+//     this.state = { hasError: false, errorMsg: "" };
+//   }
+
+//   static getDerivedStateFromError(error: Error) {
+//     return { hasError: true, errorMsg: error.message };
+//   }
+
+//   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+//     console.error("AR Crash caught by Boundary:", error, errorInfo);
+//   }
+
+//   render() {
+//     if (this.state.hasError) {
+//       return (
+//         <div className="min-h-screen bg-orange-600 flex items-center justify-center p-6 text-center">
+//           <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md">
+//             <h2 className="text-red-600 font-black text-2xl mb-2">
+//               ENGINE FAILURE
+//             </h2>
+//             <p className="text-gray-600 text-sm mb-6">{this.state.errorMsg}</p>
+//             <button
+//               onClick={() => window.location.reload()}
+//               className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-bold transition-colors"
+//             >
+//               REBOOT SYSTEM
+//             </button>
+//           </div>
+//         </div>
+//       );
+//     }
+//     return this.props.children;
+//   }
+// }
+
+// // 2. THE AR LOGIC COMPONENT
+// const MODEL_PATH = "/models/glasses_1.glb";
+
+// function ARVisionInner() {
+//   const videoRef = useRef<HTMLVideoElement>(null);
+//   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+//   // Refs for cleanup (Crucial for preventing PC/Mobile crashes)
+//   const sceneRef = useRef<THREE.Scene | null>(null);
+//   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+//   const modelRef = useRef<THREE.Group | null>(null);
+//   const landmarkerRef = useRef<FaceLandmarker | null>(null);
+//   const streamRef = useRef<MediaStream | null>(null);
+//   const requestRef = useRef<number | null>(null);
+
+//   const [status, setStatus] = useState("Initializing...");
+//   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+//   const [isFaceDetected, setIsFaceDetected] = useState(false);
+
+//   useEffect(() => {
+//     async function startAR() {
+//       try {
+//         // Init Three.js
+//         const scene = new THREE.Scene();
+//         const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
+//         camera.position.z = 5;
+
+//         const renderer = new THREE.WebGLRenderer({
+//           canvas: canvasRef.current!,
+//           alpha: true,
+//           antialias: false,
+//           precision: "mediump",
+//         });
+//         renderer.setSize(640, 480);
+
+//         scene.add(new THREE.AmbientLight(0xffffff, 2));
+//         const light = new THREE.DirectionalLight(0xffffff, 1);
+//         light.position.set(0, 5, 5);
+//         scene.add(light);
+
+//         sceneRef.current = scene;
+//         rendererRef.current = renderer;
+
+//         // Load Model
+//         setStatus("Loading 3D Model...");
+//         const loader = new GLTFLoader();
+//         loader.load(
+//           MODEL_PATH,
+//           (gltf) => {
+//             gltf.scene.visible = false;
+//             scene.add(gltf.scene);
+//             modelRef.current = gltf.scene as any;
+//           },
+//           undefined,
+//           (e) => setErrorMessage("Model path not found in /public/models/"),
+//         );
+
+//         // Init AI
+//         setStatus("Starting AI Engine...");
+//         const fileset = await FilesetResolver.forVisionTasks(
+//           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
+//         );
+//         const landmarker = await FaceLandmarker.createFromOptions(fileset, {
+//           baseOptions: {
+//             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+//             delegate: "CPU", // CPU is safer for Vivo Y21 and Intel HD 3000
+//           },
+//           runningMode: "VIDEO",
+//           numFaces: 1,
+//         });
+//         landmarkerRef.current = landmarker;
+
+//         // Init Camera
+//         setStatus("Activating Lens...");
+//         const stream = await navigator.mediaDevices.getUserMedia({
+//           video: { width: 640, height: 480, facingMode: "user" },
+//         });
+//         streamRef.current = stream;
+
+//         if (videoRef.current) {
+//           videoRef.current.srcObject = stream;
+//           videoRef.current.onloadedmetadata = () => {
+//             videoRef.current?.play();
+//             setStatus("Ready");
+//             renderLoop();
+//           };
+//         }
+//       } catch (err: any) {
+//         setErrorMessage(err.message || "Hardware/Camera access denied");
+//       }
+//     }
+
+//     const renderLoop = () => {
+//       if (
+//         videoRef.current &&
+//         landmarkerRef.current &&
+//         rendererRef.current &&
+//         sceneRef.current
+//       ) {
+//         const results = landmarkerRef.current.detectForVideo(
+//           videoRef.current,
+//           performance.now(),
+//         );
+
+//         if (modelRef.current) {
+//           if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+//             setIsFaceDetected(true);
+//             modelRef.current.visible = true;
+//             const pts = results.faceLandmarks[0];
+//             const nose = pts[168];
+//             const left = pts[33];
+//             const right = pts[263];
+
+//             // Mapping
+//             modelRef.current.position.x = (nose.x - 0.5) * -8;
+//             modelRef.current.position.y = (0.5 - nose.y) * 6;
+//             modelRef.current.position.z = 2;
+
+//             const roll = Math.atan2(right.y - left.y, right.x - left.x);
+//             modelRef.current.rotation.z = -roll;
+
+//             const d = Math.sqrt(
+//               Math.pow(right.x - left.x, 2) + Math.pow(right.y - left.y, 2),
+//             );
+//             modelRef.current.scale.setScalar(d * 11);
+//           } else {
+//             setIsFaceDetected(false);
+//             modelRef.current.visible = false;
+//           }
+//           rendererRef.current.render(
+//             sceneRef.current,
+//             new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000).copy(
+//               new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000),
+//             ),
+//           );
+//           // Update: The line above was simplified, let's fix the camera reference
+//         }
+//       }
+//       requestRef.current = requestAnimationFrame(renderLoop);
+//     };
+
+//     startAR();
+
+//     return () => {
+//       // CLEANUP: Prevents the PC from crashing on reload
+//       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+//       streamRef.current?.getTracks().forEach((t) => t.stop());
+//       rendererRef.current?.dispose();
+//       landmarkerRef.current?.close();
+//     };
+//   }, []);
+
+//   if (errorMessage) {
+//     throw new Error(errorMessage); // This triggers the Error Boundary
+//   }
+
+//   return (
+//     <div className="w-full max-w-5xl bg-white rounded-[2rem] shadow-2xl overflow-hidden border-b-8 border-orange-800">
+//       <header className="bg-orange-600 p-4 flex justify-between items-center text-white">
+//         <h1 className="font-black italic tracking-tighter uppercase ml-4">
+//           AR Vision v2
+//         </h1>
+//         <div
+//           className={`px-4 py-1 rounded-full text-[10px] font-bold ${isFaceDetected ? "bg-green-500" : "bg-yellow-500 text-orange-950 animate-pulse"}`}
+//         >
+//           {isFaceDetected ? "TRACKING ACTIVE" : status}
+//         </div>
+//       </header>
+
+//       <div className="relative aspect-video bg-stone-900 group">
+//         <video
+//           ref={videoRef}
+//           playsInline
+//           muted
+//           className="absolute inset-0 w-full h-full object-cover -scale-x-100"
+//         />
+//         <canvas
+//           ref={canvasRef}
+//           className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
+//         />
+
+//         {!isFaceDetected && status === "Ready" && (
+//           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+//             <p className="bg-orange-600/80 text-white px-6 py-2 rounded-full text-xs font-bold backdrop-blur-sm">
+//               FIT FACE IN FRAME
+//             </p>
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   );
+// }
+
+// // 3. THE EXPORTED PAGE
+// export default function VirtualTryOnPage() {
+//   return (
+//     <main className="min-h-screen bg-gradient-to-br from-yellow-400 to-orange-500 p-4 flex items-center justify-center font-sans">
+//       <ARSystemErrorBoundary>
+//         <ARVisionInner />
+//       </ARSystemErrorBoundary>
+//     </main>
+//   );
+// }
+
+// "use client";
+
+// import React, { useEffect, useRef, useState } from "react";
+// import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+// import * as THREE from "three";
+// import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
+// // Ensure your model is at: public/models/glasses_1.glb
+// const MODEL_PATH = "/models/glasses_1.glb";
+
+// export default function VirtualTryOn3D() {
+//   const videoRef = useRef<HTMLVideoElement>(null);
+//   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+//   // Three.js References
+//   const sceneRef = useRef<THREE.Scene | null>(null);
+//   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+//   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+//   const modelRef = useRef<THREE.Group | null>(null);
+
+//   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
+//     null,
+//   );
+//   const [status, setStatus] = useState("Loading AI...");
+
+//   // 1. Initialize Three.js (The 3D Engine)
+//   useEffect(() => {
+//     if (!canvasRef.current) return;
+
+//     // Create Scene
+//     const scene = new THREE.Scene();
+//     sceneRef.current = scene;
+
+//     // Create Camera
+//     const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
+//     camera.position.z = 5;
+//     cameraRef.current = camera;
+
+//     // Create Renderer (Optimized for Vivo Y21)
+//     const renderer = new THREE.WebGLRenderer({
+//       canvas: canvasRef.current,
+//       alpha: true, // Transparent background to see video
+//       antialias: false, // Save memory
+//       precision: "mediump", // Lowers GPU load
+//     });
+//     renderer.setSize(640, 480);
+//     rendererRef.current = renderer;
+
+//     // Add Basic Lights
+//     const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+//     scene.add(ambientLight);
+//     const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+//     sunLight.position.set(0, 5, 5);
+//     scene.add(sunLight);
+
+//     // Load your GLB Model
+//     const loader = new GLTFLoader();
+//     loader.load(MODEL_PATH, (gltf) => {
+//       const model = gltf.scene;
+//       model.visible = false; // Hide until face is detected
+//       scene.add(model);
+//       modelRef.current = model as any;
+//     });
+
+//     return () => {
+//       renderer.dispose();
+//     };
+//   }, []);
+
+//   // 2. Initialize MediaPipe (The AI) - Same as your working code
+//   useEffect(() => {
+//     const initAI = async () => {
+//       const fileset = await FilesetResolver.forVisionTasks(
+//         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
+//       );
+//       const landmarker = await FaceLandmarker.createFromOptions(fileset, {
+//         baseOptions: {
+//           modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+//           delegate: "GPU", // Using GPU as your working code did
+//         },
+//         runningMode: "VIDEO",
+//         numFaces: 1,
+//       });
+//       setFaceLandmarker(landmarker);
+//       setStatus("Ready!");
+//     };
+//     initAI();
+//   }, []);
+
+//   // 3. Start Camera - Same as your working code
+//   useEffect(() => {
+//     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+//       navigator.mediaDevices
+//         .getUserMedia({
+//           video: { width: 640, height: 480, facingMode: "user" },
+//         })
+//         .then((stream) => {
+//           if (videoRef.current) {
+//             videoRef.current.srcObject = stream;
+//             videoRef.current.onloadedmetadata = () => {
+//               videoRef.current?.play();
+//               predictWebcam();
+//             };
+//           }
+//         });
+//     }
+//   }, [faceLandmarker]);
+
+//   const predictWebcam = async () => {
+//     if (
+//       !videoRef.current ||
+//       !faceLandmarker ||
+//       !sceneRef.current ||
+//       !rendererRef.current
+//     ) {
+//       requestAnimationFrame(predictWebcam);
+//       return;
+//     }
+
+//     const results = faceLandmarker.detectForVideo(
+//       videoRef.current,
+//       performance.now(),
+//     );
+
+//     if (modelRef.current) {
+//       if (results.faceLandmarks.length > 0) {
+//         // Requirement 1: Appear when face is detected
+//         modelRef.current.visible = true;
+
+//         const landmarks = results.faceLandmarks[0];
+//         const noseBridge = landmarks[168];
+//         const leftEye = landmarks[33];
+//         const rightEye = landmarks[263];
+
+//         // --- MATH: Position ---
+//         // Convert MediaPipe (0 to 1) to Three.js coordinates
+//         // For the camera at Z=5, the visible width is roughly 8 units
+//         modelRef.current.position.x = (noseBridge.x - 0.5) * -8;
+//         modelRef.current.position.y = (0.5 - noseBridge.y) * 6;
+//         modelRef.current.position.z = 2; // Fixed distance from camera
+
+//         // --- MATH: Rotation ---
+//         const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+//         modelRef.current.rotation.z = -roll;
+
+//         // --- MATH: Scale ---
+//         const eyeDist = Math.sqrt(
+//           Math.pow(rightEye.x - leftEye.x, 2) +
+//             Math.pow(rightEye.y - leftEye.y, 2),
+//         );
+//         const scaleFactor = eyeDist * 12; // Adjust 12 until it fits your model
+//         modelRef.current.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+//         // Yaw (Turning left/right)
+//         const yaw = (landmarks[1].x - noseBridge.x) * 2;
+//         modelRef.current.rotation.y = yaw;
+//       } else {
+//         // Requirement 2: Disappear when face disappears
+//         modelRef.current.visible = false;
+//       }
+
+//       // Render the frame
+//       rendererRef.current.render(sceneRef.current, cameraRef.current!);
+//     }
+
+//     requestAnimationFrame(predictWebcam);
+//   };
+
+//   return (
+//     <main className="min-h-screen bg-gradient-to-br from-yellow-400 to-orange-500 p-4 flex flex-col items-center justify-center font-sans overflow-hidden">
+//       <div className="max-w-4xl w-full bg-white/90 backdrop-blur-md rounded-[2rem] shadow-2xl overflow-hidden border-4 border-orange-200">
+//         {/* Yellow/Orange Header */}
+//         <div className="bg-orange-600 p-5 text-center">
+//           <h1 className="text-2xl font-black text-white uppercase tracking-widest">
+//             3D GLASSES TRY-ON
+//           </h1>
+//           <p className="text-yellow-300 text-[10px] font-bold uppercase">
+//             {status}
+//           </p>
+//         </div>
+
+//         <div className="p-4 flex flex-col items-center">
+//           {/* AR Viewport */}
+//           <div className="relative w-full aspect-[4/3] bg-black rounded-2xl border-4 border-white shadow-lg overflow-hidden">
+//             {/* The real video (Mirrored) */}
+//             <video
+//               ref={videoRef}
+//               autoPlay
+//               playsInline
+//               muted
+//               className="absolute inset-0 w-full h-full object-cover -scale-x-100"
+//             />
+
+//             {/* The 3D Overlay (Mirrored to match video) */}
+//             <canvas
+//               ref={canvasRef}
+//               className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
+//             />
+
+//             {!faceLandmarker && (
+//               <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+//                 <div className="w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+//               </div>
+//             )}
+//           </div>
+
+//           <div className="mt-6 w-full flex justify-center">
+//             <div
+//               className={`px-6 py-2 rounded-full font-black text-xs transition-all ${modelRef.current?.visible ? "bg-orange-600 text-white" : "bg-yellow-100 text-orange-900 opacity-50"}`}
+//             >
+//               {modelRef.current?.visible
+//                 ? "LENS CONNECTED"
+//                 : "POSITION FACE IN VIEW"}
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+
+//       <footer className="mt-4 text-orange-900/50 text-[10px] font-bold uppercase tracking-widest">
+//         Optimized for Vivo Y21 • 3D Engine v1.0
+//       </footer>
+//     </main>
+//   );
+// }
 
 // "use client";
 
