@@ -1,132 +1,227 @@
 "use client";
 
-import React, { useEffect, useRef, useState, Suspense } from "react";
-import * as THREE from "three";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import React, { useEffect, useRef, useState } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const GLB_MODEL_PATH = "/models/glasses_1.glb";
+// Ensure your model is at: public/models/glasses_1.glb
+const MODEL_PATH = "/models/glasses_1.glb";
 
-function Glasses({ tracking }: { tracking: any }) {
-  const { scene } = useGLTF(GLB_MODEL_PATH);
-  const ref = useRef<THREE.Group>(null);
-
-  useFrame(() => {
-    if (!ref.current || !tracking?.detected) {
-      if (ref.current) ref.current.visible = false;
-      return;
-    }
-
-    const pts = tracking.landmarks;
-    ref.current.visible = true;
-
-    // Direct mapping for lower CPU usage
-    const nose = pts[168];
-    const left = pts[33];
-    const right = pts[263];
-
-    // Position (Simplified for performance)
-    ref.current.position.set((nose.x - 0.5) * -8, (0.5 - nose.y) * 6, 2);
-
-    // Tilt
-    const roll = Math.atan2(right.y - left.y, right.x - left.x);
-    ref.current.rotation.z = -roll;
-
-    // Scale
-    const d = Math.sqrt(Math.pow(right.x - left.x, 2) + Math.pow(right.y - left.y, 2));
-    ref.current.scale.setScalar(d * 11);
-  });
-
-  return <group ref={ref}><primitive object={scene} /></group>;
-}
-
-export default function VivoOptimizedAR() {
+export default function VirtualTryOn3D() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [tracking, setTracking] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Three.js References
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const modelRef = useRef<THREE.Group | null>(null);
+
+  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
+    null,
+  );
+  const [status, setStatus] = useState("Loading AI...");
+
+  // 1. Initialize Three.js (The 3D Engine)
   useEffect(() => {
-    let landmarker: FaceLandmarker;
-    let stream: MediaStream;
-    let frame: number;
+    if (!canvasRef.current) return;
 
-    async function start() {
-      try {
-        const fileset = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-        );
-        
-        landmarker = await FaceLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "CPU", // Forcing CPU saves the Vivo's GPU from crashing
-          },
-          runningMode: "VIDEO",
-          numFaces: 1,
-        });
+    // Create Scene
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
 
-        // Requesting lower resolution for the Vivo Y21 to save RAM
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "user", width: 320, height: 240 } 
-        });
+    // Create Camera
+    const camera = new THREE.PerspectiveCamera(75, 640 / 480, 0.1, 1000);
+    camera.position.z = 5;
+    cameraRef.current = camera;
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play();
-            loop();
-          };
-        }
-      } catch (e: any) {
-        setError("Make sure you are using HTTPS and allowed Camera access.");
-      }
-    }
+    // Create Renderer (Optimized for Vivo Y21)
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      alpha: true, // Transparent background to see video
+      antialias: false, // Save memory
+      precision: "mediump", // Lowers GPU load
+    });
+    renderer.setSize(640, 480);
+    rendererRef.current = renderer;
 
-    const loop = () => {
-      if (videoRef.current?.readyState === 4 && landmarker) {
-        const res = landmarker.detectForVideo(videoRef.current, performance.now());
-        setTracking(res.faceLandmarks?.[0] ? { detected: true, landmarks: res.faceLandmarks[0] } : { detected: false });
-      }
-      frame = requestAnimationFrame(loop);
-    };
+    // Add Basic Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+    scene.add(ambientLight);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+    sunLight.position.set(0, 5, 5);
+    scene.add(sunLight);
 
-    start();
+    // Load your GLB Model
+    const loader = new GLTFLoader();
+    loader.load(MODEL_PATH, (gltf) => {
+      const model = gltf.scene;
+      model.visible = false; // Hide until face is detected
+      scene.add(model);
+      modelRef.current = model as any;
+    });
+
     return () => {
-      cancelAnimationFrame(frame);
-      stream?.getTracks().forEach(t => t.stop());
+      renderer.dispose();
     };
   }, []);
 
-  if (error) return <div className="p-10 text-white bg-red-600 h-screen">{error}</div>;
+  // 2. Initialize MediaPipe (The AI) - Same as your working code
+  useEffect(() => {
+    const initAI = async () => {
+      const fileset = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
+      );
+      const landmarker = await FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+          delegate: "GPU", // Using GPU as your working code did
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      });
+      setFaceLandmarker(landmarker);
+      setStatus("Ready!");
+    };
+    initAI();
+  }, []);
+
+  // 3. Start Camera - Same as your working code
+  useEffect(() => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({
+          video: { width: 640, height: 480, facingMode: "user" },
+        })
+        .then((stream) => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play();
+              predictWebcam();
+            };
+          }
+        });
+    }
+  }, [faceLandmarker]);
+
+  const predictWebcam = async () => {
+    if (
+      !videoRef.current ||
+      !faceLandmarker ||
+      !sceneRef.current ||
+      !rendererRef.current
+    ) {
+      requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    const results = faceLandmarker.detectForVideo(
+      videoRef.current,
+      performance.now(),
+    );
+
+    if (modelRef.current) {
+      if (results.faceLandmarks.length > 0) {
+        // Requirement 1: Appear when face is detected
+        modelRef.current.visible = true;
+
+        const landmarks = results.faceLandmarks[0];
+        const noseBridge = landmarks[168];
+        const leftEye = landmarks[33];
+        const rightEye = landmarks[263];
+
+        // --- MATH: Position ---
+        // Convert MediaPipe (0 to 1) to Three.js coordinates
+        // For the camera at Z=5, the visible width is roughly 8 units
+        modelRef.current.position.x = (noseBridge.x - 0.5) * -8;
+        modelRef.current.position.y = (0.5 - noseBridge.y) * 6;
+        modelRef.current.position.z = 2; // Fixed distance from camera
+
+        // --- MATH: Rotation ---
+        const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+        modelRef.current.rotation.z = -roll;
+
+        // --- MATH: Scale ---
+        const eyeDist = Math.sqrt(
+          Math.pow(rightEye.x - leftEye.x, 2) +
+            Math.pow(rightEye.y - leftEye.y, 2),
+        );
+        const scaleFactor = eyeDist * 12; // Adjust 12 until it fits your model
+        modelRef.current.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+        // Yaw (Turning left/right)
+        const yaw = (landmarks[1].x - noseBridge.x) * 2;
+        modelRef.current.rotation.y = yaw;
+      } else {
+        // Requirement 2: Disappear when face disappears
+        modelRef.current.visible = false;
+      }
+
+      // Render the frame
+      rendererRef.current.render(sceneRef.current, cameraRef.current!);
+    }
+
+    requestAnimationFrame(predictWebcam);
+  };
 
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden">
-      <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
-      <div className="absolute inset-0 z-10 pointer-events-none">
-        <Canvas dpr={1} camera={{ position: [0, 0, 5] }}>
-          <ambientLight intensity={2} />
-          <Suspense fallback={null}>
-            <Glasses tracking={tracking} />
-          </Suspense>
-        </Canvas>
+    <main className="min-h-screen bg-gradient-to-br from-yellow-400 to-orange-500 p-4 flex flex-col items-center justify-center font-sans overflow-hidden">
+      <div className="max-w-4xl w-full bg-white/90 backdrop-blur-md rounded-[2rem] shadow-2xl overflow-hidden border-4 border-orange-200">
+        {/* Yellow/Orange Header */}
+        <div className="bg-orange-600 p-5 text-center">
+          <h1 className="text-2xl font-black text-white uppercase tracking-widest">
+            3D GLASSES TRY-ON
+          </h1>
+          <p className="text-yellow-300 text-[10px] font-bold uppercase">
+            {status}
+          </p>
+        </div>
+
+        <div className="p-4 flex flex-col items-center">
+          {/* AR Viewport */}
+          <div className="relative w-full aspect-[4/3] bg-black rounded-2xl border-4 border-white shadow-lg overflow-hidden">
+            {/* The real video (Mirrored) */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover -scale-x-100"
+            />
+
+            {/* The 3D Overlay (Mirrored to match video) */}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
+            />
+
+            {!faceLandmarker && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <div className="w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 w-full flex justify-center">
+            <div
+              className={`px-6 py-2 rounded-full font-black text-xs transition-all ${modelRef.current?.visible ? "bg-orange-600 text-white" : "bg-yellow-100 text-orange-900 opacity-50"}`}
+            >
+              {modelRef.current?.visible
+                ? "LENS CONNECTED"
+                : "POSITION FACE IN VIEW"}
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="absolute top-5 left-5 text-white text-[10px] font-mono bg-black/50 p-2 rounded">
-        VIVO Y21 OPTIMIZED MODE
-      </div>
-    </div>
+
+      <footer className="mt-4 text-orange-900/50 text-[10px] font-bold uppercase tracking-widest">
+        Optimized for Vivo Y21 • 3D Engine v1.0
+      </footer>
+    </main>
   );
 }
-
-
-
-
-
-
-
-
-
-
 
 // "use client";
 
