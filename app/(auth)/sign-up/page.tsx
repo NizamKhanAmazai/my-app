@@ -1,8 +1,10 @@
-'use client';
-import React, { useState, ChangeEvent, FormEvent } from 'react';
-import { ShoppingBag, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
-import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+"use client";
+import React, { useState, ChangeEvent, FormEvent } from "react";
+import { ShoppingBag, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useAppDispatch } from "@/store/hooks";
+import { setUser } from "@/store/features/userSlice";
 
 // Define the form state type
 interface FormData {
@@ -14,27 +16,28 @@ interface FormData {
 const SignUpPage: React.FC = () => {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
-    name: '',
-    email: '',
-    password: '',
+    name: "",
+    email: "",
+    password: "",
   });
 
   const [errors, setErrors] = useState<Partial<FormData>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [authError, setAuthError] = useState('');
+  const [authError, setAuthError] = useState("");
 
+  const dispatch = useAppDispatch();
   // Simple client-side validation
   const validate = (): boolean => {
     const newErrors: Partial<FormData> = {};
-    if (!formData.name) newErrors.name = 'Full name is required';
+    if (!formData.name) newErrors.name = "Full name is required";
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = "Please enter a valid email address";
     }
     if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+      newErrors.password = "Password must be at least 8 characters";
     }
 
     setErrors(newErrors);
@@ -55,78 +58,56 @@ const SignUpPage: React.FC = () => {
     if (!validate()) return;
 
     setIsSubmitting(true);
-    setAuthError('');
+    setAuthError("");
 
     try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setAuthError(data.error || 'Failed to create account');
+        setAuthError(data.error || "Failed to create account");
         return;
       }
-
       // Sign in the user after successful signup
-      const signInResult = await signIn('credentials', {
+      const signInResult = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
         redirect: false,
       });
 
       if (signInResult?.ok) {
-        router.push('/');
+        router.push("/");
       } else {
-        setAuthError('Account created but sign in failed. Please try signing in.');
+        setAuthError(
+          "Account created but sign in failed. Please try signing in.",
+        );
       }
     } catch (error) {
-      setAuthError('An error occurred. Please try again.');
+      setAuthError("An error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError(""); // Clear any previous errors
+    await signIn("google", { callbackUrl: "/" }); // Redirect to home page after Google sign-in
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans">
       <div className="max-w-5xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
-        
-        {/* Left Side: Brand/Marketing (Hidden on small mobile if needed, but here responsive) */}
-        <div className="w-full md:w-1/2 bg-gradient-to-br from-[#FFA500] to-[#FFD700] p-8 md:p-12 flex flex-col justify-between text-white">
-          <div>
-            <div className="flex items-center gap-2 mb-8">
-              <div className="bg-white p-2 rounded-lg">
-                <ShoppingBag className="text-[#FFA500] w-6 h-6" />
-              </div>
-              <span className="text-2xl font-bold tracking-tight">ShopBright</span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-6 leading-tight">
-              Start your shopping journey today.
-            </h1>
-            <p className="text-orange-50 text-lg mb-8">
-              Join thousands of happy shoppers and get exclusive access to our sun-kissed deals.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-yellow-200" />
-              <span>Free shipping on your first order</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-yellow-200" />
-              <span>Early access to seasonal sales</span>
-            </div>
-          </div>
-        </div>
-
         {/* Right Side: Form */}
         <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16">
           <div className="mb-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              Create Account
+            </h2>
             <p className="text-gray-500">Enter your details to get started.</p>
           </div>
 
@@ -140,7 +121,10 @@ const SignUpPage: React.FC = () => {
 
             {/* Name Field */}
             <div>
-              <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label
+                htmlFor="name"
+                className="block text-sm font-semibold text-gray-700 mb-2"
+              >
                 Full Name
               </label>
               <input
@@ -150,18 +134,25 @@ const SignUpPage: React.FC = () => {
                 required
                 aria-invalid={errors.name ? "true" : "false"}
                 className={`w-full px-4 py-3 rounded-xl border transition-all duration-200 outline-none focus:ring-2 focus:ring-[#FFA500] focus:border-transparent ${
-                  errors.name ? 'border-red-500' : 'border-gray-300 hover:border-[#FFA500]'
+                  errors.name
+                    ? "border-red-500"
+                    : "border-gray-300 hover:border-[#FFA500]"
                 }`}
                 placeholder="John Doe"
                 value={formData.name}
                 onChange={handleChange}
               />
-              {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+              {errors.name && (
+                <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+              )}
             </div>
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-semibold text-gray-700 mb-2"
+              >
                 Email Address
               </label>
               <input
@@ -171,29 +162,38 @@ const SignUpPage: React.FC = () => {
                 required
                 aria-invalid={errors.email ? "true" : "false"}
                 className={`w-full px-4 py-3 rounded-xl border transition-all duration-200 outline-none focus:ring-2 focus:ring-[#FFA500] focus:border-transparent ${
-                  errors.email ? 'border-red-500' : 'border-gray-300 hover:border-[#FFA500]'
+                  errors.email
+                    ? "border-red-500"
+                    : "border-gray-300 hover:border-[#FFA500]"
                 }`}
                 placeholder="hello@example.com"
                 value={formData.email}
                 onChange={handleChange}
               />
-              {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
+              {errors.email && (
+                <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+              )}
             </div>
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-semibold text-gray-700 mb-2"
+              >
                 Password
               </label>
               <div className="relative">
                 <input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   required
                   aria-invalid={errors.password ? "true" : "false"}
                   className={`w-full px-4 py-3 rounded-xl border transition-all duration-200 outline-none focus:ring-2 focus:ring-[#FFA500] focus:border-transparent ${
-                    errors.password ? 'border-red-500' : 'border-gray-300 hover:border-[#FFA500]'
+                    errors.password
+                      ? "border-red-500"
+                      : "border-gray-300 hover:border-[#FFA500]"
                   }`}
                   placeholder="••••••••"
                   value={formData.password}
@@ -208,7 +208,9 @@ const SignUpPage: React.FC = () => {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
+              {errors.password && (
+                <p className="mt-1 text-xs text-red-500">{errors.password}</p>
+              )}
             </div>
 
             {/* CTA Button */}
@@ -219,22 +221,54 @@ const SignUpPage: React.FC = () => {
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <svg
+                    className="animate-spin h-5 w-5 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
                   </svg>
                   Creating account...
                 </span>
               ) : (
-                'Create Account'
+                "Create Account"
               )}
+            </button>
+
+            {/* Or separator */}
+            <div className="relative flex items-center py-5">
+              <div className="grow border-t border-gray-300"></div>
+              <span className="shrink mx-4 text-gray-400">OR</span>
+              <div className="grow border-t border-gray-300"></div>
+            </div>
+
+            {/* Google Sign-in Button */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-3.5 rounded-xl transition-colors duration-300 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 active:scale-[0.98]"
+            >
+              {/* <chrome className="w-5 h-5" />  */}
+              Sign in with Google
             </button>
 
             {/* Footer Link */}
             <p className="text-center text-gray-600 mt-8">
-              Already a member?{' '}
-              <a 
-                href="/signin" 
+              Already a member?{" "}
+              <a
+                href="/signin"
                 className="text-[#FFA500] font-semibold hover:text-[#e69500] underline underline-offset-4 decoration-yellow-300 transition-colors"
               >
                 Log in
@@ -242,58 +276,41 @@ const SignUpPage: React.FC = () => {
             </p>
           </form>
         </div>
+
+        {/* Left Side: Brand/Marketing (Hidden on small mobile if needed, but here responsive) */}
+        <div className="w-full md:w-1/2 bg-linear-to-br from-[#FFA500] to-[#FFD700] p-8 md:p-12 flex flex-col justify-between text-white">
+          <div>
+            <div className="flex items-center gap-2 mb-8">
+              <div className="bg-white p-2 rounded-lg">
+                <ShoppingBag className="text-[#FFA500] w-6 h-6" />
+              </div>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-extrabold mb-6 leading-tight">
+              Start your shopping journey today.
+            </h1>
+            <p className="text-orange-50 text-lg mb-8">
+              Join thousands of happy shoppers and get exclusive access to our
+              sun-kissed deals.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-yellow-200" />
+              <span>Free shipping on your first order</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-yellow-200" />
+              <span>Early access to seasonal sales</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default SignUpPage;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // "use client";
 
