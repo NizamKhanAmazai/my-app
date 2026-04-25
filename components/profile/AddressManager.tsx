@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   MapPin,
-  Plus,
-  Edit2,
+  Plus, 
   Trash2,
   Loader2,
   Home,

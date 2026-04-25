@@ -2,11 +2,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   ShoppingBag,
-  ChevronDown,
-  Star,
+  ChevronDown, 
   SlidersHorizontal,
-  X,
-  Plus,
+  X, 
   Loader2,
 } from "lucide-react"; 
 import ProductCard from "@/components/product/ProductCard";

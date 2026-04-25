@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { InputField } from "@/components/Checkout/InputField";
 import { OrderSummary } from "@/components/Checkout/OrderSummary";
-import { OrderItem, FormData, Order } from "@/types/checkout";
+import { OrderItem, FormData } from "@/types/checkout";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { clearCart } from "@/store/features/cartSlice";
 import { useRouter } from "next/navigation";

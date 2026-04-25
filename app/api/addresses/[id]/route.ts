@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 export async function DELETE(
-  req: Request,
-  { params }: { params: { id?: string } },
+  req: NextRequest,
+  props: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -13,8 +13,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // added this to fix the build issue
+    const { id } = await props.params;
+    
     // ✅ FIX: await the whole params object
-    const { id } = await params;
+    // const { id } = await params;
 
     if (!id) {
       return NextResponse.json(

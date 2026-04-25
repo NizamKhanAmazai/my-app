@@ -9,8 +9,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import ProductCard from "@/components/product/ProductCard";
+import { twMerge } from "tailwind-merge"; 
 
 /** * Utility for Tailwind classes  */
 function cn(...inputs: ClassValue[]) {
@@ -206,9 +205,9 @@ export default function SearchResultsPage() {
               <LoadingSkeleton />
             ) : sortedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-x-8 gap-y-12">
-                {sortedProducts.map((product) => (
+                {/* {sortedProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />
-                ))}
+                ))} */}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in-95 duration-500">

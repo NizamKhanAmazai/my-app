@@ -4,8 +4,11 @@ import { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    // const { searchParams } = new URL(req.url);
 
+    //added the below one to fix the deploy issue
+    const searchParams = req.nextUrl.searchParams;
+    
     const page = Number(searchParams.get("page") ?? "1");
     const limit = Number(searchParams.get("limit") ?? "10");
     const search = searchParams.get("search") ?? "";

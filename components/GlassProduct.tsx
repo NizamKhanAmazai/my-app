@@ -4,16 +4,12 @@ import {
   Star,
   ShoppingCart,
   Heart,
-  Truck,
-  ShieldCheck,
-  RotateCcw,
+  Truck, 
   Minus,
   Plus,
   Maximize2,
-  CheckCircle2,
-  Info,
-  Eye,
-  Link,
+  CheckCircle2, 
+  Eye, 
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";

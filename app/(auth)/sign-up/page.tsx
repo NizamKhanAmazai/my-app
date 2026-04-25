@@ -3,8 +3,7 @@ import React, { useState, ChangeEvent, FormEvent } from "react";
 import { ShoppingBag, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useAppDispatch } from "@/store/hooks";
-import { setUser } from "@/store/features/userSlice";
+import { useAppDispatch } from "@/store/hooks"; 
 
 // Define the form state type
 interface FormData {

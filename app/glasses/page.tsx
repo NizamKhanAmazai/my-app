@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronDown, SlidersHorizontal, X, Filter } from "lucide-react";
-import { useRouter } from "next/navigation";
 import ProductCard from "@/components/product/ProductCard";
 
 // --- Types ---
