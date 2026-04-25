@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import SidebarNavigation from "@/components/profile/SidebarNavigation";
 import ProfileInfoCard from "@/components/profile/ProfileInfoCard";
@@ -12,22 +14,23 @@ import { useAppSelector } from "@/store/hooks";
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile");
-  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const { status } = useSession();
 
   const reduxUser = useAppSelector((state) => state.user.user);
 
   useEffect(() => {
-    // Mocking a data fetch delay
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+    if (status === "unauthenticated") {
+      router.replace("/sign-up");
+    }
+  }, [status, router]);
 
   const user = reduxUser
     ? {
         id: reduxUser.id,
         name: reduxUser.name,
         email: reduxUser.email,
-        phone: reduxUser.phoneNumber || "+923001234567",
+        phone: reduxUser.phoneNumber || "03001234567",
         image:
           reduxUser.image ||
           "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
@@ -35,7 +38,7 @@ export default function ProfilePage() {
       }
     : null;
 
-  if (isLoading || !user)
+  if (status === "loading" || status === "unauthenticated" || !user)
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <ProfileSkeleton />
@@ -45,7 +48,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#fafafa] py-20 ">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        <ProfileHeader user={user} />
+        <ProfileHeader />
 
         <div className="mt-8 flex flex-col md:flex-row gap-8">
           <aside className="w-full md:w-64">

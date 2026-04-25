@@ -1,5 +1,5 @@
 "use client";
-import { X, MapPin, Check } from "lucide-react";
+import { X, MapPin, Check, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface AddAddressModalProps {
@@ -11,19 +11,76 @@ export default function AddAddressModal({
   isOpen,
   onClose,
 }: AddAddressModalProps) {
+  const [formData, setFormData] = useState({
+    fullName: "",
+    phoneNumber: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "",
+    fullAddress: "",
+    landmark: "",
+  });
   const [isDefault, setIsDefault] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
-      document.body.style.overflow = "hidden";
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "hidden";
+      }
     } else {
-      const timer = setTimeout(() => setShouldRender(false), 300); // Wait for animation
-      document.body.style.overflow = "unset";
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "unset";
+      }
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, isDefault }),
+      });
+
+      if (res.ok) {
+        alert("Address added successfully");
+        onClose();
+        setFormData({
+          fullName: "",
+          phoneNumber: "",
+          city: "",
+          state: "",
+          country: "",
+          postalCode: "",
+          fullAddress: "",
+          landmark: "",
+        });
+        setIsDefault(false);
+      } else {
+        alert("Failed to add address");
+      }
+    } catch (error) {
+      alert("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!shouldRender) return null;
 
@@ -31,29 +88,23 @@ export default function AddAddressModal({
     <div
       className={`fixed inset-0 z-50 flex items-end md:items-center justify-center transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
     >
-      {/* Backdrop with Blur */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
 
-      {/* Modal Container */}
       <div
         className={`
         relative w-full bg-white shadow-2xl overflow-hidden
         max-w-2xl max-h-[90vh] overflow-y-auto z-10
-        /* Mobile: Bottom Sheet Styles */
         rounded-t-[2.5rem] md:rounded-2xl
-        /* Animation Logic */
         ${isOpen ? "animate-water-drop" : "translate-y-full md:scale-90 opacity-0"}
       `}
       >
-        {/* The Water Ripple Layer */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="ripple-effect" />
         </div>
 
-        {/* Content (Z-indexed above ripple) */}
         <div className="relative z-20">
           <div className="sticky top-0 bg-white/80 backdrop-blur-sm px-6 py-5 flex justify-between items-center border-b border-gray-100">
             <div className="flex items-center gap-3">
@@ -72,58 +123,76 @@ export default function AddAddressModal({
             </button>
           </div>
 
-          <form className="p-8 space-y-6">
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="input-group">
                 <label>Full Name</label>
                 <input
+                  id="fullName"
                   type="text"
                   placeholder="John Doe"
                   className="modern-input"
+                  value={formData.fullName}
+                  onChange={handleChange}
                   required
                 />
               </div>
               <div className="input-group">
                 <label>Phone Number</label>
                 <input
+                  id="phoneNumber"
                   type="tel"
                   placeholder="+92 XXX XXXXXXX"
                   className="modern-input"
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label>Country</label>
-                <input
-                  type="text"
-                  placeholder="Pakistan"
-                  className="modern-input"
+                  value={formData.phoneNumber}
+                  onChange={handleChange}
                   required
                 />
               </div>
               <div className="input-group">
                 <label>City</label>
                 <input
+                  id="country"
+                  type="text"
+                  placeholder="Pakistan"
+                  className="modern-input"
+                  value={formData.country}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div className="input-group">
+                <label>City</label>
+                <input
+                  id="city"
                   type="text"
                   placeholder="Lahore"
                   className="modern-input"
+                  value={formData.city}
+                  onChange={handleChange}
                   required
                 />
               </div>
               <div className="input-group">
                 <label>State / Province</label>
                 <input
+                  id="state"
                   type="text"
                   placeholder="Punjab"
                   className="modern-input"
+                  value={formData.state}
+                  onChange={handleChange}
                 />
               </div>
               <div className="input-group">
                 <label>Postal Code</label>
                 <input
+                  id="postalCode"
                   type="text"
                   placeholder="54000"
                   className="modern-input"
+                  value={formData.postalCode}
+                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -131,9 +200,12 @@ export default function AddAddressModal({
             <div className="input-group">
               <label>Full Address</label>
               <textarea
+                id="fullAddress"
                 rows={2}
                 placeholder="Building, Street, Area..."
                 className="modern-input resize-none"
+                value={formData.fullAddress}
+                onChange={handleChange}
                 required
               />
             </div>
@@ -141,9 +213,12 @@ export default function AddAddressModal({
             <div className="input-group">
               <label>Landmark (Optional)</label>
               <input
+                id="landmark"
                 type="text"
                 placeholder="e.g. Near Orange Line Station"
                 className="modern-input"
+                value={formData.landmark}
+                onChange={handleChange}
               />
             </div>
 
@@ -171,9 +246,11 @@ export default function AddAddressModal({
             <div className="pt-2 flex flex-col md:flex-row gap-4">
               <button
                 type="submit"
-                className="flex-2 py-4 bg-linear-to-r from-[#FFA500] to-[#FFD700] text-white font-bold rounded-2xl shadow-xl shadow-orange-100 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                disabled={loading}
+                className="flex-2 py-4 bg-linear-to-r from-[#FFA500] to-[#FFD700] text-white font-bold rounded-2xl shadow-xl shadow-orange-100 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Save & Continue
+                {loading && <Loader2 size={20} className="animate-spin" />}
+                {loading ? "Saving..." : "Save & Continue"}
               </button>
               <button
                 type="button"
@@ -188,7 +265,6 @@ export default function AddAddressModal({
       </div>
 
       <style jsx>{`
-        /* The "Water Drop" Animation */
         @keyframes water-drop-mobile {
           0% {
             transform: translateY(100%);
@@ -202,7 +278,6 @@ export default function AddAddressModal({
             opacity: 1;
           }
         }
-
         @keyframes water-drop-desktop {
           0% {
             transform: scale(0.5);
@@ -216,8 +291,6 @@ export default function AddAddressModal({
             opacity: 1;
           }
         }
-
-        /* The Ripple Effect */
         @keyframes ripple {
           0% {
             transform: scale(0);
@@ -228,19 +301,16 @@ export default function AddAddressModal({
             opacity: 0;
           }
         }
-
         .animate-water-drop {
           animation: water-drop-mobile 0.5s cubic-bezier(0.23, 1, 0.32, 1)
             forwards;
         }
-
         @media (min-width: 768px) {
           .animate-water-drop {
             animation: water-drop-desktop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)
               forwards;
           }
         }
-
         .ripple-effect {
           position: absolute;
           top: 50%;
@@ -256,37 +326,28 @@ export default function AddAddressModal({
           transform: translate(-50%, -50%) scale(0);
           animation: ripple 1.2s ease-out infinite;
         }
-
-        .input-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
         .input-group label {
-          font-size: 0.7rem;
+          display: block;
+          margin-bottom: 0.5rem;
+          font-size: 0.85rem;
           font-weight: 800;
-          color: #9ca3af;
+          color: #64748b;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-left: 0.25rem;
         }
-
         .modern-input {
           width: 100%;
-          padding: 0.8rem 1.25rem;
-          background-color: #f9fafb;
-          border: 1px solid #f3f4f6;
-          border-radius: 1rem;
+          padding: 1rem 1.25rem;
+          background: #f8fafc;
+          border: 2px solid #f1f5f9;
+          border-radius: 1.25rem;
           font-size: 0.95rem;
-          transition: all 0.2s;
-          outline: none;
+          transition: all 0.3s;
         }
-
         .modern-input:focus {
-          background-color: #fff;
+          outline: none;
+          background: white;
           border-color: #ffa500;
-          box-shadow: 0 0 0 4px rgba(255, 165, 0, 0.08);
+          box-shadow: 0 0 0 4px rgba(255, 165, 0, 0.1);
         }
       `}</style>
     </div>

@@ -3,7 +3,35 @@ import { ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 export default function SecuritySettings() {
-  const [showPass, setShowPass] = useState(false);
+  const [showPass, setShowPass] = useState<boolean>(false);
+  const [oldPassword, setOldPassword] = useState<string>("");
+  const [newPassword, setNewPassword] = useState<string>("");
+
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    try {
+      const res = await fetch("/api/user/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          oldPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to change password");
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error("Change password error:", error.message);
+      throw error;
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ">
@@ -20,6 +48,8 @@ export default function SecuritySettings() {
             <div className="relative">
               <input
                 type={showPass ? "text" : "password"}
+                value={oldPassword}
+                onChange={(event) => setOldPassword(event.target.value)}
                 placeholder="••••••••"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#FFA500]/20 outline-none transition-all"
               />
@@ -33,6 +63,8 @@ export default function SecuritySettings() {
             <input
               type={showPass ? "text" : "password"}
               placeholder="Min. 8 characters"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#FFA500]/20 outline-none transition-all"
             />
           </div>
@@ -49,7 +81,8 @@ export default function SecuritySettings() {
           </div>
 
           <button
-            type="submit"
+            type="submit" 
+            onClick={() => changePassword(oldPassword, newPassword)}
             className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-all shadow-lg hover:shadow-gray-200"
           >
             Update Password

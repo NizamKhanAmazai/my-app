@@ -1,4 +1,4 @@
-// "use client";
+"use client";
 
 import { signIn, signOut, useSession } from "next-auth/react";
 
@@ -14,5 +14,9 @@ export default function Home() {
     );
   }
 
-  return <button onClick={() => signIn("google")}>Sign in with Google</button>;
+  return (
+    <button onClick={() => signIn("google", { callbackUrl: "/" })}>
+      Sign in with Google
+    </button>
+  );
 }

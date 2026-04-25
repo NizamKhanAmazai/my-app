@@ -1,16 +1,16 @@
 import { NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
 import GoogleProvider from "next-auth/providers/google";
+import { getRequiredEnv } from "./env";
+import crypto from "crypto";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as any,
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: getRequiredEnv("GOOGLE_CLIENT_ID"),
+      clientSecret: getRequiredEnv("GOOGLE_CLIENT_SECRET"),
     }),
     CredentialsProvider({
       name: "credentials",
@@ -53,11 +53,50 @@ export const authOptions: NextAuthOptions = {
     signIn: "/sign-in",
   },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider !== "google") {
+        return true;
+      }
+
+      if (!user.email) {
+        return false;
+      }
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email: user.email },
+        select: { id: true },
+      });
+
+      if (!existingUser) {
+        const fallbackName = user.email.split("@")[0];
+        const randomPassword = crypto.randomBytes(32).toString("hex");
+        const hashedPassword = await bcrypt.hash(randomPassword, 12);
+
+        await prisma.user.create({
+          data: {
+            email: user.email,
+            name: user.name?.trim() || fallbackName,
+            image: user.image ?? null,
+            password: hashedPassword,
+            status: "ACTIVE",
+          },
+        });
+      }
+
+      return true;
+    },
     async jwt({ token, user }) {
       // user is only available on the first sign in (login/signup)
       if (user) {
-        token.id = user.id;
-        // Add other user properties to token if needed for session callback
+        if (user.email) {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            select: { id: true },
+          });
+          token.id = dbUser?.id ?? user.id;
+        } else {
+          token.id = user.id;
+        }
       }
       return token;
     },
@@ -69,11 +108,15 @@ export const authOptions: NextAuthOptions = {
           where: { id: token.id as string },
         });
         if (dbUser) {
+          session.user.name = dbUser.name;
+          session.user.email = dbUser.email;
+          session.user.image = dbUser.image ?? null;
           session.user.createdAt = dbUser.createdAt.toISOString();
           session.user.updatedAt = dbUser.updatedAt.toISOString();
           session.user.status = dbUser.status;
           session.user.phoneNumber = dbUser.phoneNumber || undefined;
-          session.user.membership = dbUser.status === "ACTIVE" ? "Premium" : "Standard";
+          session.user.membership =
+            dbUser.status === "ACTIVE" ? "Premium" : "Standard";
         }
       }
       return session;

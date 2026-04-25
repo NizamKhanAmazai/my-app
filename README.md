@@ -1,5 +1,53 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Supabase Postgres Signup Integration
+
+This project's signup API stores users in a Supabase PostgreSQL database.
+
+### 1. Configure environment variables
+
+Copy `.env.example` to `.env.local` and fill in your values:
+
+```bash
+cp .env.example .env.local
+```
+
+Required values:
+
+- `DATABASE_URL`: Supabase Postgres connection string used by Prisma.
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Used for browser Supabase client usage.
+
+For the current signup implementation, user creation is done via Prisma (`DATABASE_URL`) directly against Supabase Postgres.
+`SUPABASE_SERVICE_ROLE_KEY` is optional unless you use server-side Supabase REST calls.
+
+### 2. Run Prisma migration/generate
+
+```bash
+npm run prisma:migrate
+npm run prisma:generate
+```
+
+### 3. Start the app
+
+```bash
+npm run dev
+```
+
+The signup form at `/sign-up` calls `/api/auth/signup`, hashes the password with bcrypt, and inserts the user into the Supabase Postgres `User` table through Prisma.
+
+### 4. Supabase dashboard checks (required)
+
+1. In Supabase, open **Project Settings > Database** and copy the Postgres connection string into `DATABASE_URL`.
+2. Keep Prisma migrations in sync:
+
+```bash
+npm run prisma:migrate
+npm run prisma:generate
+```
+
+3. In **Table Editor**, confirm the `User` table exists and new rows appear after signup.
+
 ## Getting Started
 
 First, run the development server:

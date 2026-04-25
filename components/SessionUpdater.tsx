@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useAppDispatch } from "@/store/hooks";
-import { setUser } from "@/store/features/userSlice";
+import { clearUser, setUser } from "@/store/features/userSlice";
 
 /**
  * SessionUpdater component listens to NextAuth session changes and dispatches user data to Redux.
@@ -32,12 +32,14 @@ export default function SessionUpdater() {
             status: session.user.status,
             createdAt: session.user.createdAt,
             updatedAt: session.user.updatedAt,
+            image: session.user.image ?? undefined,
+            phoneNumber: session.user.phoneNumber ?? undefined,
+            membership: session.user.membership ?? undefined,
           }),
         );
       }
     } else if (status === "unauthenticated") {
-      // Optionally clear user from Redux if session ends
-      // dispatch(clearUser());
+      dispatch(clearUser());
     }
   }, [session, status, dispatch]);
 

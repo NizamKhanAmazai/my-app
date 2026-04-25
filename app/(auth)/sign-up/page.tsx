@@ -100,18 +100,22 @@ const SignUpPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen pt-20 bg-gray-50 flex items-center justify-center p-4 font-sans">
       <div className="max-w-5xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
         {/* Right Side: Form */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 lg:p-16">
+        <div className="w-full md:w-1/2 p-4 md:p-12 lg:p-16">
           <div className="mb-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-2">
               Create Account
             </h2>
             <p className="text-gray-500">Enter your details to get started.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-3 md:space-y-6"
+            noValidate
+          >
             {/* Auth Error Alert */}
             {authError && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
@@ -248,7 +252,7 @@ const SignUpPage: React.FC = () => {
             </button>
 
             {/* Or separator */}
-            <div className="relative flex items-center py-5">
+            <div className="relative flex items-center py-1">
               <div className="grow border-t border-gray-300"></div>
               <span className="shrink mx-4 text-gray-400">OR</span>
               <div className="grow border-t border-gray-300"></div>
@@ -268,7 +272,7 @@ const SignUpPage: React.FC = () => {
             <p className="text-center text-gray-600 mt-8">
               Already a member?{" "}
               <a
-                href="/signin"
+                href="/sign-in"
                 className="text-[#FFA500] font-semibold hover:text-[#e69500] underline underline-offset-4 decoration-yellow-300 transition-colors"
               >
                 Log in
@@ -278,20 +282,23 @@ const SignUpPage: React.FC = () => {
         </div>
 
         {/* Left Side: Brand/Marketing (Hidden on small mobile if needed, but here responsive) */}
-        <div className="w-full md:w-1/2 bg-linear-to-br from-[#FFA500] to-[#FFD700] p-8 md:p-12 flex flex-col justify-between text-white">
+        <div className="hidden w-full md:w-1/2 bg-linear-to-br from-[#FFA500] to-[#FFD700] p-8 md:p-12 md:flex flex-col justify-between text-white">
           <div>
             <div className="flex items-center gap-2 mb-8">
               <div className="bg-white p-2 rounded-lg">
                 <ShoppingBag className="text-[#FFA500] w-6 h-6" />
               </div>
             </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-6 leading-tight">
+            <h1 className="text-4xl md:text-3xl font-extrabold mb-6 leading-tight">
               Start your shopping journey today.
             </h1>
             <p className="text-orange-50 text-lg mb-8">
               Join thousands of happy shoppers and get exclusive access to our
               sun-kissed deals.
             </p>
+          </div>
+          <div className="space-y-4">
+            <img src="" alt="" />
           </div>
 
           <div className="space-y-4">
@@ -311,64 +318,3 @@ const SignUpPage: React.FC = () => {
 };
 
 export default SignUpPage;
-
-// "use client";
-
-// import { useState } from "react";
-// import { signIn } from "next-auth/react";
-
-// export default function SignUp() {
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [name, setName] = useState("");
-
-//   const handleSubmit = async (e: React.FormEvent) => {
-//     e.preventDefault();
-//     const res = await fetch("/api/auth/signup", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({ email, password, name }),
-//     });
-
-//     if (res.ok) {
-//       await signIn("credentials", { email, password, callbackUrl: "/" });
-//     } else {
-//       alert("Error creating account");
-//     }
-//   };
-
-//   return (
-//     <div className="flex items-center justify-center min-h-screen">
-//       <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md">
-//         <h1 className="text-2xl mb-4">Sign Up</h1>
-//         <input
-//           type="text"
-//           placeholder="Name"
-//           value={name}
-//           onChange={(e) => setName(e.target.value)}
-//           className="block w-full mb-2 p-2 border"
-//           required
-//         />
-//         <input
-//           type="email"
-//           placeholder="Email"
-//           value={email}
-//           onChange={(e) => setEmail(e.target.value)}
-//           className="block w-full mb-2 p-2 border"
-//           required
-//         />
-//         <input
-//           type="password"
-//           placeholder="Password"
-//           value={password}
-//           onChange={(e) => setPassword(e.target.value)}
-//           className="block w-full mb-4 p-2 border"
-//           required
-//         />
-//         <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">
-//           Sign Up
-//         </button>
-//       </form>
-//     </div>
-//   );
-// }

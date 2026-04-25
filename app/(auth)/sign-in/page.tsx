@@ -1,8 +1,8 @@
 "use client";
 import React, { useState, ChangeEvent, FormEvent } from "react";
-import { ShoppingBag, Eye, EyeOff, LockKeyhole } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 interface LoginFormData {
   email: string;
@@ -10,7 +10,8 @@ interface LoginFormData {
 }
 
 const LoginPage: React.FC = () => {
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: "",
@@ -55,13 +56,14 @@ const LoginPage: React.FC = () => {
       const result = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
+        callbackUrl,
         redirect: false,
       });
 
       if (result?.error) {
         setAuthError("Invalid email or password");
-      } else if (result?.ok) {
-        router.push("/");
+      } else if (result?.ok && result.url) {
+        window.location.href = result.url;
       }
     } catch (error) {
       setAuthError("An error occurred. Please try again.");
@@ -70,11 +72,16 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError("");
+    await signIn("google", { callbackUrl });
+  };
+
   return (
     <div className="pt-25 min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans">
       <div className="max-w-5xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row-reverse">
         {/* Left Side: Brand Visuals (Now on the right for variety, or switch classes to keep same) */}
-        <div className="hidden  w-full md:w-1/2 bg-gradient-to-br from-[#FFD700] via-[#FFA500] to-[#FF8C00] p-8 md:p-12 md:flex flex-col justify-center text-white text-center md:text-left">
+        <div className="hidden  w-full md:w-1/2 bg-linear-to-br from-[#FFD700] via-[#FFA500] to-[#FF8C00] p-8 md:p-12 md:flex flex-col justify-center text-white text-center md:text-left">
           <div className="mb-8 flex justify-center md:justify-start">
             <div className="bg-white/20 backdrop-blur-md p-4 rounded-full">
               <LockKeyhole className="w-12 h-12 text-white" />
@@ -235,6 +242,20 @@ const LoginPage: React.FC = () => {
               ) : (
                 "Sign In"
               )}
+            </button>
+
+            <div className="relative flex items-center py-3">
+              <div className="grow border-t border-gray-300"></div>
+              <span className="shrink mx-4 text-gray-400 text-xs">OR</span>
+              <div className="grow border-t border-gray-300"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-3.5 rounded-xl transition-colors duration-300 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 active:scale-[0.98]"
+            >
+              Sign in with Google
             </button>
 
             {/* Footer Link */}

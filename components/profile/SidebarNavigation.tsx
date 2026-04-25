@@ -9,6 +9,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { useAppDispatch } from "@/store/hooks";
+import { clearUser } from "@/store/features/userSlice";
 
 const navItems = [
   { id: "profile", label: "My Profile", icon: User },
@@ -19,6 +21,13 @@ const navItems = [
 ];
 
 export default function SidebarNavigation({ activeTab, setActiveTab }: any) {
+  const dispatch = useAppDispatch();
+
+  const handleSignOut = async () => {
+    dispatch(clearUser());
+    await signOut({ callbackUrl: "/sign-up" });
+  };
+
   return (
     <nav className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 sticky top-8">
       <div className="space-y-1">
@@ -44,7 +53,7 @@ export default function SidebarNavigation({ activeTab, setActiveTab }: any) {
 
       <div className="mt-4 pt-4 border-t border-gray-100">
         <button
-          onClick={() => signOut()}
+          onClick={handleSignOut}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-all"
         >
           <LogOut size={20} />
